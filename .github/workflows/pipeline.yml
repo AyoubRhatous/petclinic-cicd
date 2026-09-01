@@ -14,6 +14,13 @@ jobs:
     name: Detect changed services
     runs-on: ubuntu-latest
 
+    outputs:
+      customers: ${{ steps.changes.outputs.customers }}
+      vets: ${{ steps.changes.outputs.vets }}
+      visits: ${{ steps.changes.outputs.visits }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      all: ${{ steps.changes.outputs.all }}
+
     steps:
 
       - name: Checkout application
@@ -23,12 +30,69 @@ jobs:
           ref: ${{ github.event.client_payload.sha }}
           fetch-depth: 0
 
-      - name: Detect changed files
+      - name: Detect changes
+        id: changes
+        shell: bash
         run: |
-          echo "Commit:"
-          echo "${{ github.event.client_payload.sha }}"
+
+          SHA="${{ github.event.client_payload.sha }}"
+
+          echo "Analyzing commit: $SHA"
+
+          # Get changed files
+          CHANGED_FILES=$(git diff-tree \
+            --no-commit-id \
+            --name-only \
+            -r \
+            "$SHA")
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Default values
+          CUSTOMERS=false
+          VETS=false
+          VISITS=false
+          FRONTEND=false
+          ALL=false
+
+          # If root Maven configuration changes,
+          # rebuild everything
+          if echo "$CHANGED_FILES" | grep -qE '^(pom.xml|.mvn/|mvnw|mvnw.cmd)'; then
+            ALL=true
+          fi
+
+          # Detect individual services
+          if echo "$CHANGED_FILES" | grep -q '^petclinic-customers-service/'; then
+            CUSTOMERS=true
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q '^petclinic-vets-service/'; then
+            VETS=true
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q '^petclinic-visits-service/'; then
+            VISITS=true
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q '^petclinic-frontend/'; then
+            FRONTEND=true
+          fi
+
+          # Export outputs
+          echo "customers=$CUSTOMERS" >> "$GITHUB_OUTPUT"
+          echo "vets=$VETS" >> "$GITHUB_OUTPUT"
+          echo "visits=$VISITS" >> "$GITHUB_OUTPUT"
+          echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
+          echo "all=$ALL" >> "$GITHUB_OUTPUT"
 
           echo ""
-          echo "Changed files:"
-          git diff-tree --no-commit-id --name-only -r \
-            "${{ github.event.client_payload.sha }}"
+          echo "=============================="
+          echo "Change detection result"
+          echo "=============================="
+          echo "Customers : $CUSTOMERS"
+          echo "Vets      : $VETS"
+          echo "Visits    : $VISITS"
+          echo "Frontend  : $FRONTEND"
+          echo "All       : $ALL"
+          echo "=============================="
