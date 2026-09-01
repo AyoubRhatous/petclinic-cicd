@@ -118,7 +118,7 @@ jobs:
 
       - name: Build Customers Service
         run: |
-          ./mvnw -pl petclinic-customers-service -am clean verify
+          mvn -pl petclinic-customers-service -am clean verify
 
 
   # ============================================================
