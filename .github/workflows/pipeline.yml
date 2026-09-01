@@ -10,6 +10,9 @@ permissions:
 
 jobs:
 
+  # ============================================================
+  # 1. Detect which services changed
+  # ============================================================
   detect-changes:
     name: Detect changed services
     runs-on: ubuntu-latest
@@ -39,7 +42,6 @@ jobs:
 
           echo "Analyzing commit: $SHA"
 
-          # Get changed files
           CHANGED_FILES=$(git diff-tree \
             --no-commit-id \
             --name-only \
@@ -49,50 +51,167 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          # Default values
           CUSTOMERS=false
           VETS=false
           VISITS=false
           FRONTEND=false
           ALL=false
 
-          # If root Maven configuration changes,
-          # rebuild everything
+          # Root Maven configuration changed
           if echo "$CHANGED_FILES" | grep -qE '^(pom.xml|.mvn/|mvnw|mvnw.cmd)'; then
             ALL=true
           fi
 
-          # Detect individual services
+          # Customers
           if echo "$CHANGED_FILES" | grep -q '^petclinic-customers-service/'; then
             CUSTOMERS=true
           fi
 
+          # Vets
           if echo "$CHANGED_FILES" | grep -q '^petclinic-vets-service/'; then
             VETS=true
           fi
 
+          # Visits
           if echo "$CHANGED_FILES" | grep -q '^petclinic-visits-service/'; then
             VISITS=true
           fi
 
+          # Frontend
           if echo "$CHANGED_FILES" | grep -q '^petclinic-frontend/'; then
             FRONTEND=true
           fi
 
-          # Export outputs
           echo "customers=$CUSTOMERS" >> "$GITHUB_OUTPUT"
           echo "vets=$VETS" >> "$GITHUB_OUTPUT"
           echo "visits=$VISITS" >> "$GITHUB_OUTPUT"
           echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
           echo "all=$ALL" >> "$GITHUB_OUTPUT"
 
-          echo ""
-          echo "=============================="
-          echo "Change detection result"
-          echo "=============================="
-          echo "Customers : $CUSTOMERS"
-          echo "Vets      : $VETS"
-          echo "Visits    : $VISITS"
-          echo "Frontend  : $FRONTEND"
-          echo "All       : $ALL"
-          echo "=============================="
+
+  # ============================================================
+  # 2. Build Customers
+  # ============================================================
+  build-customers:
+    name: Build Customers Service
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.customers == 'true' ||
+      needs.detect-changes.outputs.all == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout application
+        uses: actions/checkout@v4
+        with:
+          repository: AyoubRhatous/petclinic-microservices
+          ref: ${{ github.event.client_payload.sha }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build Customers Service
+        run: |
+          ./mvnw -pl petclinic-customers-service -am clean verify
+
+
+  # ============================================================
+  # 3. Build Vets
+  # ============================================================
+  build-vets:
+    name: Build Vets Service
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.vets == 'true' ||
+      needs.detect-changes.outputs.all == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout application
+        uses: actions/checkout@v4
+        with:
+          repository: AyoubRhatous/petclinic-microservices
+          ref: ${{ github.event.client_payload.sha }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build Vets Service
+        run: |
+          ./mvnw -pl petclinic-vets-service -am clean verify
+
+
+  # ============================================================
+  # 4. Build Visits
+  # ============================================================
+  build-visits:
+    name: Build Visits Service
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.visits == 'true' ||
+      needs.detect-changes.outputs.all == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout application
+        uses: actions/checkout@v4
+        with:
+          repository: AyoubRhatous/petclinic-microservices
+          ref: ${{ github.event.client_payload.sha }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build Visits Service
+        run: |
+          ./mvnw -pl petclinic-visits-service -am clean verify
+
+
+  # ============================================================
+  # 5. Build Frontend
+  # ============================================================
+  build-frontend:
+    name: Build Frontend
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.frontend == 'true' ||
+      needs.detect-changes.outputs.all == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout application
+        uses: actions/checkout@v4
+        with:
+          repository: AyoubRhatous/petclinic-microservices
+          ref: ${{ github.event.client_payload.sha }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build Frontend
+        run: |
+          ./mvnw -pl petclinic-frontend -am clean verify
