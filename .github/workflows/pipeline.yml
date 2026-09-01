@@ -1,4 +1,4 @@
-name: Application CI/CD
+name: Petclinic CI/CD
 
 on:
   repository_dispatch:
@@ -9,12 +9,26 @@ permissions:
   contents: read
 
 jobs:
-  pipeline:
+
+  detect-changes:
+    name: Detect changed services
     runs-on: ubuntu-latest
 
     steps:
-      - name: Display event
+
+      - name: Checkout application
+        uses: actions/checkout@v4
+        with:
+          repository: AyoubRhatous/petclinic-microservices
+          ref: ${{ github.event.client_payload.sha }}
+          fetch-depth: 0
+
+      - name: Detect changed files
         run: |
-          echo "Repository: ${{ github.event.client_payload.repository }}"
-          echo "Branch: ${{ github.event.client_payload.branch }}"
-          echo "Commit: ${{ github.event.client_payload.sha }}"
+          echo "Commit:"
+          echo "${{ github.event.client_payload.sha }}"
+
+          echo ""
+          echo "Changed files:"
+          git diff-tree --no-commit-id --name-only -r \
+            "${{ github.event.client_payload.sha }}"
