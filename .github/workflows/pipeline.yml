@@ -119,6 +119,20 @@ jobs:
       - name: Build Customers Service
         run: |
           mvn -pl petclinic-customers-service -am clean verify
+      # -------------------------------------------------------- # 4. SonarQube Cloud - SAST / Code Quality # -------------------------------------------------------- 
+      - name: SonarQube analysis 
+        continue-on-error: true 
+        env: 
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} 
+          SONAR_HOST_URL: https://sonarcloud.io 
+          run: |
+            ./mvnw \
+              -pl petclinic-customers-service \
+              sonar:sonar \
+              -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+              -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+              -Dsonar.host.url=$SONAR_HOST_URL \ 
+              -Dsonar.token=$SONAR_TOKEN
 
 
   # ============================================================
