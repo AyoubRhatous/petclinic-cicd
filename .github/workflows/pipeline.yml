@@ -133,7 +133,20 @@ jobs:
             -Dsonar.host.url=$SONAR_HOST_URL \
             -Dsonar.token=$SONAR_TOKEN
 
+      # --------------------------------------------------------
+      # Trivy - Filesystem Security Scan
+      # --------------------------------------------------------
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.3
 
+      - name: Trivy filesystem scan
+        continue-on-error: true
+        run: |
+          trivy fs \
+            --scanners vuln,secret,misconfig \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            .
   # ============================================================
   # 3. Build Vets
   # ============================================================
