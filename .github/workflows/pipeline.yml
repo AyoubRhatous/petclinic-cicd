@@ -128,7 +128,7 @@ jobs:
         run: |
           mvn \
             -pl petclinic-customers-service \
-            sonar:sonar \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar \
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=$SONAR_HOST_URL \ 
