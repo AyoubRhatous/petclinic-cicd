@@ -136,17 +136,17 @@ jobs:
       # --------------------------------------------------------
       # Trivy - Filesystem Security Scan
       # --------------------------------------------------------
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.3
-
       - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.35.0
         continue-on-error: true
-        run: |
-          trivy fs \
-            --scanners vuln,secret,misconfig \
-            --severity HIGH,CRITICAL \
-            --exit-code 0 \
-            .
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
+
   # ============================================================
   # 3. Build Vets
   # ============================================================
