@@ -146,6 +146,34 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: '0'
           format: table
+          
+      # --------------------------------------------------------
+      # Docker - Build Customers Image
+      # --------------------------------------------------------
+      - name: Build Customers Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          docker build \
+            -t "$DOCKERHUB_USERNAME/petclinic-customers:$IMAGE_TAG" \
+            ./petclinic-customers-service
+
+      # --------------------------------------------------------
+      # Trivy - Container Image Security Scan
+      # --------------------------------------------------------
+      - name: Trivy container image scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        with:
+          image-ref: '${{ env.DOCKERHUB_USERNAME }}/petclinic-customers:${{ env.IMAGE_TAG }}'
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
 
   # ============================================================
   # 3. Build Vets
