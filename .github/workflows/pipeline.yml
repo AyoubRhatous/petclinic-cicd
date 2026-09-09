@@ -126,7 +126,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} 
           SONAR_HOST_URL: https://sonarcloud.io 
         run: |
-          ./mvnw \
+          mvn \
             -pl petclinic-customers-service \
             sonar:sonar \
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
