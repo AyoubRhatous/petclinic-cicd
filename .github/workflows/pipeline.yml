@@ -188,6 +188,36 @@ jobs:
             --format cyclonedx \
             --output sbom/customers-${IMAGE_TAG}.cdx.json \
             "$DOCKERHUB_USERNAME/petclinic-customers:$IMAGE_TAG"
+      # --------------------------------------------------------
+      # Publish SBOM to Security Repository
+      # --------------------------------------------------------
+      - name: Publish Customers SBOM
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_REPO_TOKEN }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          git clone \
+            https://x-access-token:${GH_TOKEN}@github.com/AyoubRhatous/security-repo-sbom.git \
+            security-repo
+
+          mkdir -p "security-repo/sbom/customers"
+
+          cp \
+            "sbom/customers-${IMAGE_TAG}.cdx.json" \
+            "security-repo/sbom/customers/${IMAGE_TAG}.cdx.json"
+
+          cd security-repo
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add sbom/customers/
+
+          git commit \
+            -m "chore(sbom): customers ${IMAGE_TAG}" \
+            || echo "No changes to commit"
+
+          git push
 
   # ============================================================
   # 3. Build Vets
