@@ -268,7 +268,124 @@ jobs:
       - name: Build Vets Service
         run: |
           ./mvnw -pl petclinic-vets-service -am clean verify
+      # -------------------------------------------------------- # 4. SonarQube Cloud - SAST / Code Quality # -------------------------------------------------------- 
+      - name: SonarQube analysis 
+        continue-on-error: true 
+        env: 
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} 
+          SONAR_HOST_URL: https://sonarcloud.io 
+        run: |
+          mvn \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.token=$SONAR_TOKEN
 
+      # --------------------------------------------------------
+      # Trivy - Filesystem Security Scan
+      # --------------------------------------------------------
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
+          
+      # --------------------------------------------------------
+      # Docker - Build  Vets Image
+      # --------------------------------------------------------
+      - name: Build Vets Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          docker build \
+            -t "$DOCKERHUB_USERNAME/petclinic-vets:$IMAGE_TAG" \
+            ./petclinic-vets-service
+
+      # --------------------------------------------------------
+      # Trivy - Container Image Security Scan
+      # --------------------------------------------------------
+      - name: Trivy container image scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        with:
+          image-ref: '${{ env.DOCKERHUB_USERNAME }}/petclinic-vets:${{ env.IMAGE_TAG }}'
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
+      # --------------------------------------------------------
+      # Trivy - Generate SBOM
+      # --------------------------------------------------------
+      - name: Generate Vets SBOM
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          mkdir -p sbom
+
+          trivy image \
+            --format cyclonedx \
+            --output sbom/vets-${IMAGE_TAG}.cdx.json \
+            "$DOCKERHUB_USERNAME/petclinic-vets:$IMAGE_TAG"
+      # --------------------------------------------------------
+      # Publish SBOM to Security Repository
+      # --------------------------------------------------------
+      - name: Publish Vets SBOM
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_REPO_TOKEN }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          git clone \
+            https://x-access-token:${GH_TOKEN}@github.com/AyoubRhatous/security-repo-sbom.git \
+            security-repo
+
+          mkdir -p "security-repo/sbom/vets"
+
+          cp \
+            "sbom/vets-${IMAGE_TAG}.cdx.json" \
+            "security-repo/sbom/vets/${IMAGE_TAG}.cdx.json"
+
+          cd security-repo
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add sbom/vets/
+
+          git commit \
+            -m "chore(sbom): customers ${IMAGE_TAG}" \
+            || echo "No changes to commit"
+
+          git push
+      # --------------------------------------------------------
+      # Docker Hub - Login
+      # --------------------------------------------------------
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # --------------------------------------------------------
+      # Docker Hub - Push Vets Image
+      # --------------------------------------------------------
+      - name: Push Vets Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          docker push \
+            "$DOCKERHUB_USERNAME/petclinic-vets:$IMAGE_TAG"
 
   # ============================================================
   # 4. Build Visits
