@@ -237,7 +237,27 @@ jobs:
         run: |
           docker push \
             "$DOCKERHUB_USERNAME/petclinic-customers:$IMAGE_TAG"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.0
+        with:
+          cosign-release: v3.0.2
 
+      - name: Check Cosign
+        run: cosign version
+
+      - name: Sign Customers Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          IMAGE="$DOCKERHUB_USERNAME/petclinic-customers:$IMAGE_TAG"
+
+          cosign sign \
+            --yes \
+            --key env://COSIGN_PRIVATE_KEY \
+            "$IMAGE"
   # ============================================================
   # 3. Build Vets
   # ============================================================
