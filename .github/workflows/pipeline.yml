@@ -258,6 +258,38 @@ jobs:
             --yes \
             --key env://COSIGN_PRIVATE_KEY \
             "$IMAGE"
+        # --------------------------------------------------------
+      # Kubernetes - Configure kubectl
+      # --------------------------------------------------------
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubernetes credentials
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "$KUBE_CONFIG" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      # --------------------------------------------------------
+      # Kubernetes - Update Customers Image
+      # --------------------------------------------------------
+      - name: Update Customers Deployment
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          kubectl set image deployment/petclinic-customers \
+            petclinic-customers="$DOCKERHUB_USERNAME/petclinic-customers:$IMAGE_TAG"
+
+      # --------------------------------------------------------
+      # Kubernetes - Wait for Rollout
+      # --------------------------------------------------------
+      - name: Wait for Customers Rollout
+        run: |
+          kubectl rollout status deployment/petclinic-customers \
+            --timeout=5m
   # ============================================================
   # 3. Build Vets
   # ============================================================
