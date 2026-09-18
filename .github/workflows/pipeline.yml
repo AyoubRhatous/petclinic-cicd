@@ -724,4 +724,176 @@ jobs:
 
       - name: Build Frontend
         run: |
-          ./mvnw -pl petclinic-frontend -am clean verify
+          mvn -pl petclinic-frontend -am clean verify
+      # -------------------------------------------------------- # 4. SonarQube Cloud - SAST / Code Quality # -------------------------------------------------------- 
+      - name: SonarQube analysis 
+        continue-on-error: true 
+        env: 
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} 
+          SONAR_HOST_URL: https://sonarcloud.io 
+        run: |
+          mvn \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.token=$SONAR_TOKEN
+
+      # --------------------------------------------------------
+      # Trivy - Filesystem Security Scan
+      # --------------------------------------------------------
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
+          
+      # --------------------------------------------------------
+      # Docker - Build  Frontend Image
+      # --------------------------------------------------------
+      - name: Build Frontend Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          docker build \
+            -t "$DOCKERHUB_USERNAME/petclinic-frontend:$IMAGE_TAG" \
+            ./petclinic-frontend-service
+
+      # --------------------------------------------------------
+      # Trivy - Container Image Security Scan
+      # --------------------------------------------------------
+      - name: Trivy container image scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        continue-on-error: true
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        with:
+          image-ref: '${{ env.DOCKERHUB_USERNAME }}/petclinic-frontend:${{ env.IMAGE_TAG }}'
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
+      # --------------------------------------------------------
+      # Trivy - Generate SBOM
+      # --------------------------------------------------------
+      - name: Generate Frontend SBOM
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          mkdir -p sbom
+
+          trivy image \
+            --format cyclonedx \
+            --output sbom/frontend-${IMAGE_TAG}.cdx.json \
+            "$DOCKERHUB_USERNAME/petclinic-frontend:$IMAGE_TAG"
+      # --------------------------------------------------------
+      # Publish SBOM to Security Repository
+      # --------------------------------------------------------
+      - name: Publish Frontend SBOM
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_REPO_TOKEN }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          git clone \
+            https://x-access-token:${GH_TOKEN}@github.com/AyoubRhatous/security-repo-sbom.git \
+            security-repo
+
+          mkdir -p "security-repo/sbom/frontend"
+
+          cp \
+            "sbom/frontend-${IMAGE_TAG}.cdx.json" \
+            "security-repo/sbom/frontend/${IMAGE_TAG}.cdx.json"
+
+          cd security-repo
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add sbom/frontend/
+
+          git commit \
+            -m "chore(sbom): frontend ${IMAGE_TAG}" \
+            || echo "No changes to commit"
+
+          git push
+      # --------------------------------------------------------
+      # Docker Hub - Login
+      # --------------------------------------------------------
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # --------------------------------------------------------
+      # Docker Hub - Push Frontend Image
+      # --------------------------------------------------------
+      - name: Push Frontend Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          docker push \
+            "$DOCKERHUB_USERNAME/petclinic-frontend:$IMAGE_TAG"    
+      
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.0
+        with:
+          cosign-release: v3.0.2
+
+      - name: Check Cosign
+        run: cosign version
+
+      - name: Sign Frontend Docker image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          IMAGE="$DOCKERHUB_USERNAME/petclinic-frontend:$IMAGE_TAG"
+
+          cosign sign \
+            --yes \
+            --key env://COSIGN_PRIVATE_KEY \
+            "$IMAGE"
+        # --------------------------------------------------------
+      # Kubernetes - Configure kubectl
+      # --------------------------------------------------------
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubernetes credentials
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "$KUBE_CONFIG" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      # --------------------------------------------------------
+      # Kubernetes - Update Frontend Image
+      # --------------------------------------------------------
+      - name: Update Frontend Deployment
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.event.client_payload.sha }}
+        run: |
+          kubectl set image deployment/petclinic-frontend \
+            petclinic-frontend="$DOCKERHUB_USERNAME/petclinic-frontend:$IMAGE_TAG"
+
+      # --------------------------------------------------------
+      # Kubernetes - Wait for Rollout
+      # --------------------------------------------------------
+      - name: Wait for Frontend Rollout
+        run: |
+          kubectl rollout status deployment/petclinic-Frontend \
+            --timeout=5m
