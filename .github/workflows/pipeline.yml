@@ -763,7 +763,7 @@ jobs:
         run: |
           docker build \
             -t "$DOCKERHUB_USERNAME/petclinic-frontend:$IMAGE_TAG" \
-            ./petclinic-frontend-service
+            ./petclinic-frontend
 
       # --------------------------------------------------------
       # Trivy - Container Image Security Scan
