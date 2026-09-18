@@ -553,7 +553,7 @@ jobs:
       # --------------------------------------------------------
       # Docker - Build  Visits Image
       # --------------------------------------------------------
-      - name: Build Vets Docker image
+      - name: Build Visits Docker image
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           IMAGE_TAG: ${{ github.event.client_payload.sha }}
